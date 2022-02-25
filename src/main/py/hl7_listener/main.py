@@ -9,13 +9,17 @@ Preconditions:
 - NATS JetStream server is running and configured with expected Subject.
 """
 import asyncio
-
+import certifi
 import os
 from hl7_listener import logger_util, logging_codes
 import hl7
+import ssl
 from hl7.mllp import start_hl7_server
 from nats.aio.client import Client as NATS
 from nats.aio.errors import ErrNoServers
+from nats.js import JetStreamContext
+from typing import Optional
+
 
 logger = logger_util.get_logger(__name__)
 
@@ -23,17 +27,30 @@ logger = logger_util.get_logger(__name__)
 _subject = os.getenv("NATS_OUTGOING_SUBJECT", default="HL7.MESSAGES")
 # NATS Jetstream connection info
 _nats_server_url = os.getenv("NATS_SERVER_URL")
+_nats_allow_reconnect = bool(os.getenv("NATS_ALLOW_RECONNECT", default=True))
+_nats_reconnect_attempts = int(os.getenv("NATS_RECONNECT_ATTEMPTS", default=10))
+_nats_nk_file = "./config/nats-server.nk"
+# Certs for NATS TLS
+_ca_certs_file = certifi.where()
+_ca_certs_path = None
+# mllp server
 _hl7_mllp_host = os.getenv("HL7_MLLP_HOST")
 _hl7_mllp_port = os.getenv("HL7_MLLP_PORT")
+
 
 logger.info(
     logging_codes.STARTUP_ENV_VARS,
     _hl7_mllp_host,
     _hl7_mllp_port,
     _nats_server_url,
-    _subject
+    _subject,
+    _nats_allow_reconnect,
+    _nats_reconnect_attempts,
+    _nats_nk_file,
+    _ca_certs_file
 )
 _nc = None  # NATS Client
+_js = None  # NATS JetStream Context
 
 
 async def send_msg_to_nats(msg):
@@ -42,7 +59,7 @@ async def send_msg_to_nats(msg):
     Note: An Exception will result if the send times out or fails for other reasons.
     """
     logger.info(logging_codes.SENDING_MSG_TO_NATS)
-    send_response = await _nc.request(_subject, msg, timeout=10, cb=None)
+    send_response = await _js.publish(_subject, msg)
     logger.info(logging_codes.NATS_REQUEST_SEND_MSG_RESPONSE, send_response)
 
 
@@ -118,11 +135,17 @@ async def hl7_receiver():
 
 
 async def nc_connect() -> bool:
-    """ Connect to the NATS jetstream server"""
+    """ Connect to the NATS JetStream server"""
     global _nc
     _nc = NATS()
     try:
-        await _nc.connect(_nats_server_url)
+        await _nc.connect(
+            servers=_nats_server_url,
+            nkeys_seed=_nats_nk_file,
+            tls=get_ssl_context(ssl.Purpose.SERVER_AUTH),
+            allow_reconnect=_nats_allow_reconnect,
+            max_reconnect_attempts=_nats_reconnect_attempts,
+        )
         logger.info(logging_codes.NATS_CONNECTED, _nats_server_url)
         return True
     except ErrNoServers as exp:
@@ -130,9 +153,36 @@ async def nc_connect() -> bool:
         raise exp
 
 
+async def get_jetstream_context() -> Optional[JetStreamContext]:
+    """
+    Create or return a JetStream context for the configured NATS server.
+
+    :return: a configured NATS JetStream context
+    """
+    global _js
+
+    if not _js:
+        _js = _nc.jetstream()
+
+    return _js
+
+
+def get_ssl_context(ssl_purpose: ssl.Purpose) -> ssl.SSLContext:
+    """
+    Returns an SSL Context configured for server auth with the certificate path
+    :param ssl_purpose:
+    """
+    ssl_context = ssl.create_default_context(ssl_purpose)
+    ssl_context.load_verify_locations(
+        cafile=_ca_certs_file, capath=_ca_certs_path
+    )
+    return ssl_context
+
+
 async def main():
     global _nc
     await nc_connect()  # Create a NATS client connection.
+    await get_jetstream_context()  # Create the NATS JetStream context
     await hl7_receiver()  # Listen/receive HL7 messages.
     if _nc:
         await _nc.close()  # Needed to avoid exception when program ends.

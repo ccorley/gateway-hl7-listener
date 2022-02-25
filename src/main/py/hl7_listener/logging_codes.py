@@ -18,7 +18,10 @@ HL7_MLLP_UNKNOWN_ERR = (
 STARTUP_ENV_VARS = (
     "HL7LLOG001: HL7 Listener started with the follow values from the env:\n"
     + 'HL7 MLLP listening host:port="%s:%s"\n'
-    + 'NATs Jetstream Connection="%s" and Subject="%s"'
+    + 'NATS Jetstream Connection="%s" and Subject="%s"\n'
+    + 'NATS Allow Reconnect:%s Reconnect attempts:%d\n'
+    + 'NATS nkey file:"%s"\n'
+    + 'CA certs file:"%s"'
 )
 HL7_MLLP_CONNECTED = "HL7LLOG002: HL7 Listener connection established. peername=%s"
 HL7_MLLP_MSG_RECEIVED = "HL7LLOG003: HL7 Listener received a message."
