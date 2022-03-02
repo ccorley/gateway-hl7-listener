@@ -29,7 +29,7 @@ _subject = os.getenv("NATS_OUTGOING_SUBJECT", default="HL7.MESSAGES")
 _nats_server_url = os.getenv("NATS_SERVER_URL")
 _nats_allow_reconnect = bool(os.getenv("NATS_ALLOW_RECONNECT", default=True))
 _nats_reconnect_attempts = int(os.getenv("NATS_RECONNECT_ATTEMPTS", default=10))
-_nats_nk_file = "./config/nats-server.nk"
+_nats_nk_file = "./conf/nats-server.nk"
 # Certs for NATS TLS
 _ca_certs_file = certifi.where()
 _ca_certs_path = None
