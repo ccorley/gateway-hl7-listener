@@ -38,9 +38,9 @@ async def test_nc_connect(mocker):
 
 @pytest.mark.asyncio
 async def test_send_msg_to_nats(mocker):
-    mocker.patch.object(main, "_nc")
+    mocker.patch.object(main, "_js")
     my_asyncmock = AsyncMock()
-    mocker.patch.object(main._nc, "request", new=my_asyncmock)
+    mocker.patch.object(main._js, "publish", new=my_asyncmock)
     await main.send_msg_to_nats("test message")
     my_asyncmock.assert_awaited()
 
